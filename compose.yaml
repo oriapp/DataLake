@@ -1,0 +1,68 @@
+services:
+  postgis:
+    image: postgis/postgis:16-3.4
+    # platform: linux/arm64/v8 # losers remove this line
+    container_name: postgis
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-gis}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-gis}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  duck:
+    build: ./duck
+    container_name: duck
+    working_dir: /work
+    environment:
+      PGHOST: postgis
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      JOB_TASK: ${JOB_TASK}
+      JOB_SINKS: ${JOB_SINKS}
+      LAKE_ROOT: ${LAKE_ROOT}
+      LAKE_TIER: ${LAKE_TIER}
+      DATASET_NAME: ${DATASET_NAME}
+    volumes:
+      - ./data:/work
+    depends_on:
+      postgis:
+        condition: service_healthy
+    # If you want to be explicit:
+    command: ["python", "/usr/local/bin/job.py"]
+
+  jupyter:
+    build: ./jupyter
+    container_name: jupyter
+    depends_on:
+      postgis:
+        condition: service_healthy
+    environment:
+      JUPYTER_TOKEN: ${JUPYTER_TOKEN:-dev}
+      PGHOST: postgis
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+    ports:
+      - "8888:8888"
+    volumes:
+      # - jupyter_home:/home/jovyan # everything persists
+      - ./data:/home/jovyan/data
+      - ./notebooks:/home/jovyan/work
+    command: start-notebook.sh --NotebookApp.token=${JUPYTER_TOKEN:-dev}
+
+
+volumes:
+  pgdata:

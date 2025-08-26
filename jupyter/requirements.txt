@@ -1,0 +1,7 @@
+duckdb==1.3.2
+psycopg2-binary
+sqlalchemy
+geopandas
+shapely
+pyproj
+pyarrow
